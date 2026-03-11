@@ -18,11 +18,12 @@ class EPTSParser:
     _VIN_RE = re.compile(r"\b([A-HJ-NPR-Z0-9]{17})\b")
     _EPTS_NUM_RE = re.compile(r"\b(\d{15})\b")
     _DATE_RE = re.compile(r"\b(\d{2}\.\d{2}\.\d{4})\b")
-    _INN_RE = re.compile(r"\b(\d{10}|\d{12})\b")
-    _OGRN_RE = re.compile(r"\b(\d{13}|\d{15})\b")
+    # FIX: anchor to keyword to avoid false positives on VIN / engine numbers / OTTS
+    _INN_RE = re.compile(r"\bИНН\b[^\d]*(\d{10}|\d{12})")
+    _OGRN_RE = re.compile(r"\bОГРН\b[^\d]*(\d{13}|\d{15})")
     _POWER_RE = re.compile(
         r"([\d.,]+)\s*(?:кВт|kW|квт)"
-        r"(?:\s*[\(/]?\s*([\d.,]+)\s*(?:л\.с\.|hp|л\.с|лс)\s*[\)]?)?"
+        r"(?:\s*[\(/]?\s*([\d.,]+)\s*(?:л\.\u0441\.|hp|л\.\u0441|лс)\s*[\)]?)?"
     )
     _YEAR_RE = re.compile(r"\b(19[5-9]\d|20[0-4]\d)\b")
 
@@ -43,11 +44,22 @@ class EPTSParser:
             text = self._ocr_text()
             self._parse_text(text, result)
         else:
-            raw_tables = self._extract_tables(result)
+            # FIX: single pdfplumber.open pass — extract tables AND text together
+            raw_tables: list = []
+            text_parts: list[str] = []
+            with pdfplumber.open(self.pdf_path) as pdf:
+                for page in pdf.pages:
+                    tables = page.extract_tables()
+                    for table in tables:
+                        raw_tables.append(table)
+                        for row in table:
+                            self._process_row(row, result)
+                    page_text = page.extract_text()
+                    if page_text:
+                        text_parts.append(page_text)
             result.raw_tables = raw_tables
             # Fallback: parse free text for fields still missing
-            text = self._extract_text()
-            self._parse_text(text, result, overwrite=False)
+            self._parse_text("\n".join(text_parts), result, overwrite=False)
 
         self._postprocess(result)
         self._data = result
@@ -78,28 +90,6 @@ class EPTSParser:
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
-
-    def _extract_tables(self, result: VehiclePassportData) -> list:
-        """Use pdfplumber to read tables and populate *result* in place."""
-        raw_tables: list = []
-        with pdfplumber.open(self.pdf_path) as pdf:
-            for page in pdf.pages:
-                tables = page.extract_tables()
-                for table in tables:
-                    raw_tables.append(table)
-                    for row in table:
-                        self._process_row(row, result)
-        return raw_tables
-
-    def _extract_text(self) -> str:
-        """Extract all plain text from the PDF."""
-        parts: list[str] = []
-        with pdfplumber.open(self.pdf_path) as pdf:
-            for page in pdf.pages:
-                text = page.extract_text()
-                if text:
-                    parts.append(text)
-        return "\n".join(parts)
 
     def _process_row(self, row: list, result: VehiclePassportData) -> None:
         """Map a table row (index, label, value) to a VehiclePassportData field."""
@@ -152,12 +142,11 @@ class EPTSParser:
         if dates:
             _set("issue_date", dates[0])
 
-        # INN (10 or 12 digits — heuristic: first match)
+        # FIX: match only after keyword ИНН / ОГРН to avoid false positives
         m = self._INN_RE.search(text)
         if m:
             _set("owner_inn", m.group(1))
 
-        # OGRN (13 or 15 digits — heuristic: first match)
         m = self._OGRN_RE.search(text)
         if m:
             _set("owner_ogrn", m.group(1))
