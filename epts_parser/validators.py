@@ -10,6 +10,8 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
+from epts_parser.models import VehiclePassportData
+
 
 @dataclass
 class ValidationError:
@@ -33,8 +35,10 @@ _RE_EPTS_NUMBER = re.compile(r"^[1-3][0-9]{3}0[1-4][0-9]{9}$")
 _RE_VIN = re.compile(r"^[A-HJ-NPR-Z0-9]{17}$")
 
 # 11.14. Номер таможенного документа -> trsdo:CustomsDocumentId
-#    Pattern: [0-9]{8}/[0-9]{6}/[0-9]{7}
-_RE_CUSTOMS = re.compile(r"^[0-9]{8}/[0-9]{6}/[0-9]{7}$")
+#    R.019 spec: [0-9]{8}/[0-9]{6}/[0-9]{7}
+#    Real PDFs emit 9-10 digit last segment (e.g. 100000000 = 9 digits)
+#    -> relaxed to [0-9]{7,10}
+_RE_CUSTOMS = re.compile(r"^[0-9]{8}/[0-9]{6}/[0-9]{7,10}$")
 
 # 11.2. Категория ТС (Конвенция) -> trsdo:VehicleCategoryCode
 #    Pattern: [A-FR](IV|I{1,3})?
@@ -56,7 +60,7 @@ _RE_ECO_CLASS = re.compile(r"^[1-6]$")
 # Public API
 # ---------------------------------------------------------------------------
 
-def validate_record(record: "VehiclePassportData") -> list[ValidationError]:
+def validate_record(record: VehiclePassportData) -> list[ValidationError]:
     """Validate *record* against R.019 patterns. Return list of errors."""
     errors: list[ValidationError] = []
 
