@@ -46,7 +46,6 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def _collect_pdfs(input_path: Path) -> list[Path]:
     if input_path.is_dir():
-        # FIX: recursive glob so subdirectories are scanned too
         return sorted(input_path.glob("**/*.pdf"))
     return [input_path]
 
@@ -64,7 +63,6 @@ def main(argv: list[str] | None = None) -> None:
         print(f"Нет PDF-файлов в: {input_path}", file=sys.stderr)
         sys.exit(1)
 
-    # FIX: keep parser instances (not just data records) so public methods work correctly
     parsers: list[EPTSParser] = []
     for pdf in pdf_files:
         parser = EPTSParser(pdf, ocr=args.ocr)
@@ -118,7 +116,6 @@ def main(argv: list[str] | None = None) -> None:
                 print(json.dumps(row, ensure_ascii=False))
 
     elif fmt == "text":
-        # FIX: use parser instances directly — no __new__ hack needed
         lines_out: list[str] = []
         for pdf, parser in zip(pdf_files, parsers):
             if len(pdf_files) > 1:
@@ -131,7 +128,6 @@ def main(argv: list[str] | None = None) -> None:
             print(text_result)
 
     else:  # json
-        # FIX: use parser instances directly — no __new__ hack needed
         if len(parsers) == 1:
             result = parsers[0].to_json(indent=args.indent)
         else:
