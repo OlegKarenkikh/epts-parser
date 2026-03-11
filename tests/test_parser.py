@@ -145,7 +145,6 @@ def test_issue_date(parsed_data):
 def test_to_dict_excludes_none():
     """to_dict() must not include fields whose value is None."""
     mock_page = MagicMock()
-    # Only provide epts_number and vin — everything else stays None
     mock_page.extract_tables.return_value = [
         [["1", "Номер ЭПТС", "111222333444555"]],
     ]
@@ -160,7 +159,6 @@ def test_to_dict_excludes_none():
         d = parser.to_dict()
 
     assert "epts_number" in d
-    # Fields that were never set must be absent
     for key, value in d.items():
         assert value is not None, f"Field '{key}' should not be None in to_dict()"
 
@@ -178,7 +176,6 @@ def test_to_json_indent(parsed_data):
     """to_json() default indent should be 2."""
     _, parser = parsed_data
     raw = parser.to_json()
-    # Indented JSON has lines starting with spaces
     assert "\n  " in raw
 
 
