@@ -18,7 +18,6 @@ class EPTSParser:
     _VIN_RE = re.compile(r"\b([A-HJ-NPR-Z0-9]{17})\b")
     _EPTS_NUM_RE = re.compile(r"\b(\d{15})\b")
     _DATE_RE = re.compile(r"\b(\d{2}\.\d{2}\.\d{4})\b")
-    # FIX: anchor to keyword to avoid false positives on VIN / engine numbers / OTTS
     _INN_RE = re.compile(r"\bИНН\b[^\d]*(\d{10}|\d{12})")
     _OGRN_RE = re.compile(r"\bОГРН\b[^\d]*(\d{13}|\d{15})")
     _POWER_RE = re.compile(
@@ -26,6 +25,8 @@ class EPTSParser:
         r"(?:\s*[\(/]?\s*([\d.,]+)\s*(?:л\.\u0441\.|hp|л\.\u0441|лс)\s*[\)]?)?"
     )
     _YEAR_RE = re.compile(r"\b(19[5-9]\d|20[0-4]\d)\b")
+    # Match "64,7 (5800)" or "64.7" — real PDF power format
+    _POWER_KW_BARE_RE = re.compile(r"([\d][\d.,]+)\s*(?:\([^)]*\))?\s*$")
 
     def __init__(self, pdf_path: str | Path, ocr: bool = False) -> None:
         self.pdf_path = Path(pdf_path)
@@ -44,7 +45,6 @@ class EPTSParser:
             text = self._ocr_text()
             self._parse_text(text, result)
         else:
-            # FIX: single pdfplumber.open pass — extract tables AND text together
             raw_tables: list = []
             text_parts: list[str] = []
             with pdfplumber.open(self.pdf_path) as pdf:
@@ -58,8 +58,11 @@ class EPTSParser:
                     if page_text:
                         text_parts.append(page_text)
             result.raw_tables = raw_tables
-            # Fallback: parse free text for fields still missing
-            self._parse_text("\n".join(text_parts), result, overwrite=False)
+            full_text = "\n".join(text_parts)
+            # Primary text pass: always overwrite (tables may have found nothing)
+            self._parse_text(full_text, result, overwrite=False)
+            # Line-by-line label/value pass for HTML-generated PDFs
+            self._parse_line_pairs(full_text, result)
 
         self._postprocess(result)
         self._data = result
@@ -95,7 +98,6 @@ class EPTSParser:
         """Map a table row (index, label, value) to a VehiclePassportData field."""
         if not row or len(row) < 2:
             return
-        # Accept both 2-column (label, value) and 3-column (index, label, value) rows
         if len(row) >= 3:
             label_cell = row[1]
             value_cell = row[2]
@@ -111,10 +113,38 @@ class EPTSParser:
 
         for pattern, field_name in FIELD_MAPPING.items():
             if re.search(pattern, label, re.IGNORECASE):
-                # Only set the field if it hasn't been set yet
                 if getattr(result, field_name) is None:
                     setattr(result, field_name, value)
                 break
+
+    def _parse_line_pairs(self, text: str, result: VehiclePassportData) -> None:
+        """Parse consecutive label/value line pairs from plain extracted text.
+
+        HTML-generated PDFs (e.g. real ЭПТС 2026 extracts) have no pdfplumber
+        tables — pdfplumber returns all content as flat text where each
+        "Naimenovanie parametra" appears on one line and its value on the next.
+        This method iterates over lines and tries to match each line against
+        FIELD_MAPPING; if matched, the next non-empty line is treated as the value.
+        """
+        lines = [ln.strip() for ln in text.splitlines()]
+        i = 0
+        while i < len(lines) - 1:
+            label = lines[i].lower()
+            for pattern, field_name in FIELD_MAPPING.items():
+                if re.fullmatch(pattern, label, re.IGNORECASE) or re.search(
+                    pattern, label, re.IGNORECASE
+                ):
+                    # Find next non-empty line as value
+                    j = i + 1
+                    while j < len(lines) and not lines[j]:
+                        j += 1
+                    if j < len(lines):
+                        value = lines[j].strip()
+                        # Skip lines that look like another label (long text or next header)
+                        if value and getattr(result, field_name) is None:
+                            setattr(result, field_name, value)
+                    break
+            i += 1
 
     def _parse_text(
         self, text: str, result: VehiclePassportData, overwrite: bool = True
@@ -142,7 +172,7 @@ class EPTSParser:
         if dates:
             _set("issue_date", dates[0])
 
-        # FIX: match only after keyword ИНН / ОГРН to avoid false positives
+        # INN / OGRN anchored to keywords
         m = self._INN_RE.search(text)
         if m:
             _set("owner_inn", m.group(1))
@@ -153,11 +183,9 @@ class EPTSParser:
 
     def _postprocess(self, result: VehiclePassportData) -> None:
         """Normalise fields after extraction."""
-        # Normalise VIN to uppercase
         if result.vin:
             result.vin = result.vin.upper().strip()
 
-        # Extract 4-digit year from longer strings like "2007 г." or "07.06.2007"
         if result.year:
             m = self._YEAR_RE.search(result.year)
             if m:
@@ -171,6 +199,23 @@ class EPTSParser:
                 result.engine_power_kw = m.group(1)
                 if m.group(2):
                     result.engine_power_hp = m.group(2)
+            elif self._POWER_KW_BARE_RE.match(raw):
+                # Format "64,7 (5800)" — keep only numeric part before space
+                result.engine_power_kw = raw.split()[0].replace(",", ".")
+
+        # Eco class: normalize "четвертый" / "пятый" → digit
+        _ECO_WORDS = {
+            "первый": "1", "второй": "2", "третий": "3",
+            "четвертый": "4", "пятый": "5", "шестой": "6",
+        }
+        if result.eco_class:
+            result.eco_class = _ECO_WORDS.get(result.eco_class.lower(), result.eco_class)
+
+        # Seats: keep only leading digit(s)
+        if result.seats_count:
+            m = re.match(r"(\d+)", result.seats_count)
+            if m:
+                result.seats_count = m.group(1)
 
         # Strip extraneous whitespace from all string fields
         for f in dataclasses.fields(result):
