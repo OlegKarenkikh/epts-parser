@@ -25,6 +25,7 @@ class EPTSParser:
         r"(?:\s*[\(/]?\s*([\d.,]+)\s*(?:л\.\u0441\.|hp|л\.\u0441|лс)\s*[\)]?)?"
     )
     _YEAR_RE = re.compile(r"\b(19[5-9]\d|20[0-4]\d)\b")
+    _INLINE_PATTERNS: list[tuple[re.Pattern, str]] | None = None
     # Match "64,7 (5800)" or "64.7" — real PDF power format
     _POWER_KW_BARE_RE = re.compile(r"([\d][\d.,]+)\s*(?:\([^)]*\))?\s*$")
 
@@ -61,8 +62,8 @@ class EPTSParser:
             full_text = "\n".join(text_parts)
             # Primary text pass: always overwrite (tables may have found nothing)
             self._parse_text(full_text, result, overwrite=False)
-            # Line-by-line label/value pass for HTML-generated PDFs
-            self._parse_line_pairs(full_text, result)
+            # Inline label+value scan for HTML-generated PDFs
+            self._parse_inline(full_text, result)
 
         self._postprocess(result)
         self._data = result
@@ -117,34 +118,33 @@ class EPTSParser:
                     setattr(result, field_name, value)
                 break
 
-    def _parse_line_pairs(self, text: str, result: VehiclePassportData) -> None:
-        """Parse consecutive label/value line pairs from plain extracted text.
+    @classmethod
+    def _get_inline_patterns(cls) -> list[tuple[re.Pattern, str]]:
+        """Build once: match label at start of line, capture value as group(1)."""
+        if cls._INLINE_PATTERNS is not None:
+            return cls._INLINE_PATTERNS
+        compiled = []
+        for raw_pat, field_name in FIELD_MAPPING.items():
+            stripped = raw_pat.lstrip("^").rstrip("$")
+            pat = re.compile(r"(?i)^" + stripped + r"[\s:\-\(\)]*(.+)$", re.UNICODE)
+            compiled.append((pat, field_name))
+        cls._INLINE_PATTERNS = compiled
+        return compiled
 
-        HTML-generated PDFs (e.g. real ЭПТС 2026 extracts) have no pdfplumber
-        tables — pdfplumber returns all content as flat text where each
-        "Naimenovanie parametra" appears on one line and its value on the next.
-        This method iterates over lines and tries to match each line against
-        FIELD_MAPPING; if matched, the next non-empty line is treated as the value.
-        """
-        lines = [ln.strip() for ln in text.splitlines()]
-        i = 0
-        while i < len(lines) - 1:
-            label = lines[i].lower()
-            for pattern, field_name in FIELD_MAPPING.items():
-                if re.fullmatch(pattern, label, re.IGNORECASE) or re.search(
-                    pattern, label, re.IGNORECASE
-                ):
-                    # Find next non-empty line as value
-                    j = i + 1
-                    while j < len(lines) and not lines[j]:
-                        j += 1
-                    if j < len(lines):
-                        value = lines[j].strip()
-                        # Skip lines that look like another label (long text or next header)
-                        if value and getattr(result, field_name) is None:
-                            setattr(result, field_name, value)
+    def _parse_inline(self, text: str, result: VehiclePassportData) -> None:
+        """Scan each line for inline label+value (e.g. 'Марка HONDA')."""
+        patterns = self._get_inline_patterns()
+        for line in text.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            for pat, field_name in patterns:
+                m = pat.match(line)
+                if m:
+                    value = m.group(1).strip()
+                    if value and getattr(result, field_name) is None:
+                        setattr(result, field_name, value)
                     break
-            i += 1
 
     def _parse_text(
         self, text: str, result: VehiclePassportData, overwrite: bool = True
@@ -199,14 +199,15 @@ class EPTSParser:
                 result.engine_power_kw = m.group(1)
                 if m.group(2):
                     result.engine_power_hp = m.group(2)
-            elif self._POWER_KW_BARE_RE.match(raw):
-                # Format "64,7 (5800)" — keep only numeric part before space
-                result.engine_power_kw = raw.split()[0].replace(",", ".")
+            else:
+                m2 = re.match(r"([\d]+[.,]\d+)", raw)
+                if m2:
+                    result.engine_power_kw = m2.group(1).replace(",", ".")
 
         # Eco class: normalize "четвертый" / "пятый" → digit
         _ECO_WORDS = {
             "первый": "1", "второй": "2", "третий": "3",
-            "четвертый": "4", "пятый": "5", "шестой": "6",
+            "четвертый": "4", "четвёртый": "4", "пятый": "5", "шестой": "6",
         }
         if result.eco_class:
             result.eco_class = _ECO_WORDS.get(result.eco_class.lower(), result.eco_class)
