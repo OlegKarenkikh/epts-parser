@@ -1,5 +1,6 @@
 """Tests for epts_parser.validators against R.019 patterns."""
-import pytest
+from __future__ import annotations
+
 from epts_parser.models import VehiclePassportData
 from epts_parser.validators import validate_record, ValidationError
 
@@ -65,7 +66,7 @@ class TestInvalidPatterns:
 
     def test_bad_category(self):
         rec = _lada_record()
-        rec.category = "Z"  # not in [A-F]|R
+        rec.category = "Z"  # not in [A-FR]
         errors = validate_record(rec)
         assert any(e.field == "category" for e in errors)
 
@@ -101,9 +102,7 @@ class TestInvalidPatterns:
         fields = {e.field for e in errors}
         expected = {"epts_number", "vin", "customs_declaration",
                     "category", "vehicle_type", "year"}
-        assert expected.issubset(fields), (
-            f"Missing error fields: {expected - fields}"
-        )
+        assert expected.issubset(fields), f"Missing error fields: {expected - fields}"
 
     def test_validation_error_str(self):
         err = ValidationError(field="vin", message="bad value")

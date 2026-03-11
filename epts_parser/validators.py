@@ -44,7 +44,7 @@ _RE_CATEGORY = re.compile(r"^[A-FR](IV|I{1,3})?$")
 #    Pattern: [A-Z]([ab]?[1-9])?G?(\.[1-3])?
 _RE_VEHICLE_TYPE = re.compile(r"^[A-Z]([ab]?[1-9])?G?(\.[1-3])?$")
 
-# 11.9. Год изготовления -> bdt:YearType (ГОСТ ИСО 8601)
+# 11.9. Год изготовления -> bdt:YearType
 #    4-значное число, диапазон 1900-2099
 _RE_YEAR = re.compile(r"^(19|20)\d{2}$")
 
@@ -56,7 +56,7 @@ _RE_ECO_CLASS = re.compile(r"^[1-6]$")
 # Public API
 # ---------------------------------------------------------------------------
 
-def validate_record(record: VehiclePassportData) -> list[ValidationError]:  # noqa: F821
+def validate_record(record: "VehiclePassportData") -> list[ValidationError]:
     """Validate *record* against R.019 patterns. Return list of errors."""
     errors: list[ValidationError] = []
 
