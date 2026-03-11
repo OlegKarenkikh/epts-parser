@@ -14,8 +14,8 @@ def pdf_to_text_via_ocr(
         pip install pdf2image pytesseract
         Tesseract OCR installed with the ``rus`` language pack.
     """
-    import pytesseract
     from pdf2image import convert_from_path
+    import pytesseract
 
     images = convert_from_path(str(pdf_path), dpi=dpi)
     pages: list[str] = []
