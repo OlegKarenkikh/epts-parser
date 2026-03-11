@@ -26,12 +26,14 @@ def to_csv(
         if f.name != "raw_tables"
     ]
 
-    with open(output_path, "w", newline="", encoding="utf-8") as fh:
+    # FIX: utf-8-sig adds BOM so the file opens correctly in Excel
+    with open(output_path, "w", newline="", encoding="utf-8-sig") as fh:
         writer = csv.DictWriter(fh, fieldnames=fieldnames, extrasaction="ignore")
         writer.writeheader()
         for record in records_list:
+            # FIX: replace None with empty string — avoids literal "None" in cells
             row = {
-                k: v
+                k: (v if v is not None else "")
                 for k, v in dataclasses.asdict(record).items()
                 if k != "raw_tables"
             }
