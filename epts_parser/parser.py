@@ -9,7 +9,12 @@ from typing import Any, Optional
 import pdfplumber
 
 from .mappings import FIELD_MAPPING, RU_LABELS
-from .models import VehiclePassportData, _ECO_WORDS, _to_int, _to_float
+from .models import VehiclePassportData, _ECO_WORDS
+
+# Separator between label and value in single-line EPTS text:
+# absorbs any mix of spaces, colons, dashes AND parenthesised sub-clauses
+# e.g. "(\u043a\u0430\u0431\u0438\u043d\u044b, \u043f\u0440\u0438\u0446\u0435\u043f\u0430)", "(\u043c\u0430\u0440\u043a\u0430, \u0442\u0438\u043f)", "/\u0432\u0435\u0434\u0443\u0449\u0438\u0435 \u043a\u043e\u043b\u0435\u0441\u0430"
+_SEP = r"(?:[\s:\-/]|\([^)]*\))*"
 
 
 class EPTSParser:
@@ -23,6 +28,8 @@ class EPTSParser:
         r"(?:\s*[\(/]?\s*([\d.,]+)\s*(?:\u043b\.\u0441\.|hp|\u043b\.\u0441|\u043b\u0441)\s*[\)]?)?"
     )
     _YEAR_RE = re.compile(r"\b(19[5-9]\d|20[0-4]\d)\b")
+    # Matches stray closing-paren prefix left after label: "\u0440\u0430\u043c\u044b) ", "\u043f\u0440\u0438\u0446\u0435\u043f\u0430) ", etc.
+    _STRAY_PAREN_RE = re.compile(r"^[^)]*\)\s*")
     _INLINE_PATTERNS: list[tuple[re.Pattern, str]] | None = None
 
     def __init__(self, pdf_path: str | Path, ocr: bool = False) -> None:
@@ -101,8 +108,10 @@ class EPTSParser:
         compiled = []
         for raw_pat, field_name in FIELD_MAPPING.items():
             stripped = raw_pat.lstrip("^").rstrip("$")
+            # _SEP absorbs parenthesised sub-clauses of the label
+            # e.g. "(\u043c\u0430\u0440\u043a\u0430, \u0442\u0438\u043f)" "(\u043a\u0430\u0431\u0438\u043d\u044b, \u043f\u0440\u0438\u0446\u0435\u043f\u0430)" before the value starts
             pat = re.compile(
-                r"(?i)^" + stripped + r"[\s:\-\(\)]*(.+)$",
+                r"(?i)^" + stripped + _SEP + r"(.+)$",
                 re.UNICODE,
             )
             compiled.append((pat, field_name))
@@ -110,6 +119,13 @@ class EPTSParser:
         return compiled
 
     def _parse_inline(self, text: str, result: VehiclePassportData) -> None:
+        """Scan each line for inline label+value.
+
+        Handles real EPTS PDF format where pdfplumber collapses label and
+        value onto one line, e.g.:
+          '\u0426\u0432\u0435\u0442 \u043a\u0443\u0437\u043e\u0432\u0430 (\u043a\u0430\u0431\u0438\u043d\u044b, \u043f\u0440\u0438\u0446\u0435\u043f\u0430) \u0441\u0438\u043d\u0438\u0439'
+          '\u041d\u043e\u043c\u0435\u0440 \u0448\u0430\u0441\u0441\u0438 (\u0440\u0430\u043c\u044b) \u041e\u0442\u0441\u0443\u0442\u0435\u0442\u0432\u0443\u0435\u0442'
+        """
         patterns = self._get_inline_patterns()
         for line in text.splitlines():
             line = line.strip()
@@ -119,6 +135,9 @@ class EPTSParser:
                 m = pat.match(line)
                 if m:
                     value = m.group(1).strip()
+                    # Strip stray closing-paren prefix that _SEP couldn't consume
+                    # because the open paren was on a previous wrapped line
+                    value = self._STRAY_PAREN_RE.sub("", value).strip()
                     if value and getattr(result, field_name, None) is None:
                         setattr(result, field_name, value)
                     break
@@ -153,39 +172,32 @@ class EPTSParser:
         if result.vin:
             result.vin = result.vin.upper().strip()
 
-        # Extract 4-digit year from strings like "2019 г."
         if result.year:
             m = self._YEAR_RE.search(result.year)
             result.year = m.group(1) if m else None
 
-        # Normalize eco class: word -> digit
         if result.eco_class:
             result.eco_class = _ECO_WORDS.get(
                 result.eco_class.lower().strip(), result.eco_class
             )
-            # keep only leading digit
             m2 = re.match(r"(\d+)", result.eco_class)
             if m2:
                 result.eco_class = m2.group(1)
 
-        # Seats: keep only leading integer (handles "5 (1-2, 2-3)" or "45 мест")
         if result.seats_count:
             m3 = re.search(r"(\d+)", result.seats_count)
             result.seats_count = m3.group(1) if m3 else None
 
-        # Mass fields: strip kg-unit suffixes, keep numeric string
         for mass_f in ("max_mass", "curb_mass"):
             val = getattr(result, mass_f)
             if val:
                 m4 = re.search(r"(\d[\d\s]*)", val.replace("\xa0", ""))
                 setattr(result, mass_f, m4.group(1).strip() if m4 else None)
 
-        # Engine volume: keep numeric part (cm3)
         if result.engine_volume:
             m5 = re.search(r"(\d+)", result.engine_volume)
             result.engine_volume = m5.group(1) if m5 else None
 
-        # Engine power: split "77.0 kVt (104.7 l.s.)" -> kw + hp
         if result.engine_power_kw:
             raw = result.engine_power_kw
             m6 = self._POWER_RE.search(raw)
@@ -194,18 +206,15 @@ class EPTSParser:
                 if m6.group(2):
                     result.engine_power_hp = m6.group(2).replace(",", ".")
             else:
-                # "64,7 (5800)" format — keep first number
                 m7 = re.match(r"([\d]+[.,]\d+|\d+)", raw)
                 if m7:
                     result.engine_power_kw = m7.group(1).replace(",", ".")
 
-        # 30-min electric power: keep first number
         if result.engine_power_30min_kw:
             m8 = re.match(r"([\d]+[.,]?\d*)", result.engine_power_30min_kw)
             if m8:
                 result.engine_power_30min_kw = m8.group(1).replace(",", ".")
 
-        # Strip whitespace from all string fields
         for f in dataclasses.fields(result):
             if f.name == "raw_tables":
                 continue
