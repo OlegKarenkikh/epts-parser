@@ -1,138 +1,167 @@
 from __future__ import annotations
 
-# Maps Russian label patterns (regex) to VehiclePassportData field names.
-# Patterns are matched case-insensitively against the stripped label cell text.
+# ---------------------------------------------------------------------------
+# FIELD_MAPPING: regex pattern (case-insensitive, applied to stripped label)
+#                -> VehiclePassportData field name
+#
+# Source: Reshenie Kollegii EAES N 122 (22.09.2015) + real 2026 EPTS PDF
+#         + Biorg API schema (docs.beorg.ru/api_docs/universal/epts/)
+# ---------------------------------------------------------------------------
 FIELD_MAPPING: dict[str, str] = {
-    # --- ЭПТС number (header or table cell) ---
-    r"номер\s+эптс": "epts_number",
+    # --- EPTS identity ---
+    r"\u043d\u043e\u043c\u0435\u0440\s+\u044d\u043f\u0442\u0441": "epts_number",
+    r"\u0441\u0442\u0430\u0442\u0443\u0441\s+\u044d\u043b\u0435\u043a\u0442\u0440\u043e\u043d\u043d\u043e\u0433\u043e\s+\u043f\u0430\u0441\u043f\u043e\u0440\u0442\u0430": "epts_status",
 
-    # --- VIN / identification number ---
-    r"идентификационный\s+номер": "vin",
+    # --- VIN / identifiers ---
+    r"\u0438\u0434\u0435\u043d\u0442\u0438\u0444\u0438\u043a\u0430\u0446\u0438\u043e\u043d\u043d\u044b\u0439\s+\u043d\u043e\u043c\u0435\u0440": "vin",
+    r"\u043d\u043e\u043c\u0435\u0440\s+\u043f\u0442\u0441": "pts_number",
 
-    # --- PTS ---
-    r"номер\s+птс": "pts_number",
+    # --- Brand / model ---
+    r"^\u043c\u0430\u0440\u043a\u0430$": "brand",
+    r"\u043a\u043e\u043c\u043c\u0435\u0440\u0447\u0435\u0441\u043a\u043e\u0435\s+\u043d\u0430\u0438\u043c\u0435\u043d\u043e\u0432\u0430\u043d\u0438\u0435": "model",
+    r"\u043c\u043e\u0434\u0438\u0444\u0438\u043a\u0430\u0446\u0438\u044f": "modification",
 
-    # --- Brand / make ---
-    r"^марка$": "brand",
+    # --- Vehicle type / category ---
+    r"\u043d\u0430\u0438\u043c\u0435\u043d\u043e\u0432\u0430\u043d\u0438\u0435\s+\(\u0442\u0438\u043f\)\s+\u0442\u0441": "vehicle_type",
+    r"\u043a\u0430\u0442\u0435\u0433\u043e\u0440\u0438\u044f\s+\u0432\s+\u0441\u043e\u043e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0438\u0438\s+\u0441\s+\u0442\u0440": "vehicle_type",
+    r"\u043a\u0430\u0442\u0435\u0433\u043e\u0440\u0438\u044f\s+\u0442\u0440\u0430\u043d\u0441\u043f\u043e\u0440\u0442\u043d\u043e\u0433\u043e\s+\u0441\u0440\u0435\u0434\u0441\u0442\u0432\u0430": "category",
+    r"\u043a\u0430\u0442\u0435\u0433\u043e\u0440\u0438\u044f\s+\u0442\u0441": "category",
+    r"\u043a\u0430\u0442\u0435\u0433\u043e\u0440\u0438\u044f\s+\u0432\s+\u0441\u043e\u043e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0438\u0438\s+\u0441\s+\u0442\u0440\s+\u0442\u0441": "vehicle_type",
 
-    # --- Commercial name / model ---
-    r"коммерческое\s+наименование": "model",
+    # --- Year / color ---
+    r"\u0433\u043e\u0434\s+\u0438\u0437\u0433\u043e\u0442\u043e\u0432\u043b\u0435\u043d\u0438\u044f": "year",
+    r"\u0446\u0432\u0435\u0442\s+\u043a\u0443\u0437\u043e\u0432\u0430": "color",
+    r"^\u0446\u0432\u0435\u0442$": "color",
+    r"\u043e\u0442\u0442\u0435\u043d\u043e\u043a\s+\u0446\u0432\u0435\u0442\u0430": "color_shade",
 
-    # --- Vehicle type ---
-    r"наименование\s+\(тип\)\s+тс": "vehicle_type",
+    # --- Body / chassis ---
+    r"\u043d\u043e\u043c\u0435\u0440\s+\u043a\u0443\u0437\u043e\u0432\u0430": "body_number",
+    r"\u043d\u043e\u043c\u0435\u0440\s+\u0448\u0430\u0441\u0441\u0438": "chassis_number",
+    r"\u0441\u0442\u0440\u0430\u043d\u0430\s+\u0438\u0437\u0433\u043e\u0442\u043e\u0432\u043b\u0435\u043d\u0438\u044f": "country_of_manufacture",
 
-    # --- Category (both short "категория ТС" and long real-PDF variant) ---
-    r"категория\s+транспортного\s+средства": "category",
-    r"категория\s+тс": "category",
+    # --- Engine ---
+    r"\u043d\u043e\u043c\u0435\u0440\s+\u0434\u0432\u0438\u0433\u0430\u0442\u0435\u043b\u044f": "engine_number",
+    r"\u0434\u0432\u0438\u0433\u0430\u0442\u0435\u043b\u044c\s+\u0432\u043d\u0443\u0442\u0440\u0435\u043d\u043d\u0435\u0433\u043e\s+\u0441\u0433\u043e\u0440\u0430\u043d\u0438\u044f": "engine_type",
+    r"\u0442\u0438\u043f\s+\u0434\u0432\u0438\u0433\u0430\u0442\u0435\u043b\u044f": "engine_type",
+    r"\u043c\u043e\u0449\u043d\u043e\u0441\u0442\u044c\s+\u0434\u0432\u0438\u0433\u0430\u0442\u0435\u043b\u044f": "engine_power_kw",
+    r"\u043c\u0430\u043a\u0441\u0438\u043c\u0430\u043b\u044c\u043d\u0430\u044f\s+\u043c\u043e\u0449\u043d\u043e\u0441\u0442\u044c\s+\(\u043a\u0432\u0442\)": "engine_power_kw",
+    r"\u0440\u0430\u0431\u043e\u0447\u0438\u0439\s+\u043e\u0431\u044a[\u0451\u0435]\u043c\s+\u0446\u0438\u043b\u0438\u043d\u0434\u0440\u043e\u0432": "engine_volume",
+    r"\u0440\u0430\u0431\u043e\u0447\u0438\u0439\s+\u043e\u0431\u044a[\u0451\u0435]\u043c": "engine_volume",
+    r"\u0433\u0438\u0431\u0440\u0438\u0434\u043d\u043e\u0433\u043e\s+\u0442\u0440\u0430\u043d\u0441\u043f\u043e\u0440\u0442\u043d\u043e\u0433\u043e": "hybrid_description",
 
-    # --- Year ---
-    r"год\s+изготовления": "year",
+    # --- Electric drive ---
+    r"\u044d\u043b\u0435\u043a\u0442\u0440\u043e\u043c\u0430\u0448\u0438\u043d\u0430\s+\(\u043c\u0430\u0440\u043a\u0430": "engine_electric_type",
+    r"\u044d\u043b\u0435\u043a\u0442\u0440\u043e\u0434\u0432\u0438\u0433\u0430\u0442\u0435\u043b\u044c\s+\(\u043c\u0430\u0440\u043a\u0430": "engine_electric_type",
+    r"\u0440\u0430\u0431\u043e\u0447\u0435\u0435\s+\u043d\u0430\u043f\u0440\u044f\u0436\u0435\u043d\u0438\u0435": "engine_electric_voltage",
+    r"\u043c\u0430\u043a\u0441\u0438\u043c\u0430\u043b\u044c\u043d\u0430\u044f\s+30\-\u043c\u0438\u043d\u0443\u0442\u043d\u0430\u044f": "engine_power_30min_kw",
 
-    # --- Color ("цвет" alone OR "цвет кузова...") ---
-    r"цвет": "color",
+    # --- Fuel / ecology ---
+    r"\u0432\u0438\u0434\s+\u0442\u043e\u043f\u043b\u0438\u0432\u0430": "fuel_type",
+    r"\u0442\u0438\u043f\s+\u0442\u043e\u043f\u043b\u0438\u0432\u0430": "fuel_type",
+    r"\u044d\u043a\u043e\u043b\u043e\u0433\u0438\u0447\u0435\u0441\u043a\u0438\u0439\s+\u043a\u043b\u0430\u0441\u0441": "eco_class",
 
-    # --- Body / chassis / engine numbers ---
-    r"номер\s+кузова": "body_number",
-    r"номер\s+шасси": "chassis_number",
-    r"номер\s+двигателя": "engine_number",
+    # --- Mass ---
+    r"\u0442\u0435\u0445\u043d\u0438\u0447\u0435\u0441\u043a\u0438\s+\u0434\u043e\u043f\u0443\u0441\u0442\u0438\u043c\u0430\u044f\s+\u043c\u0430\u043a\u0441\u0438\u043c\u0430\u043b\u044c\u043d\u0430\u044f\s+\u043c\u0430\u0441\u0441\u0430": "max_mass",
+    r"\u0440\u0430\u0437\u0440\u0435\u0448\u0451\u043d\u043d\u0430\u044f\s+\u043c\u0430\u043a\u0441\u0438\u043c\u0430\u043b\u044c\u043d\u0430\u044f\s+\u043c\u0430\u0441\u0441\u0430": "max_mass",
+    r"\u043c\u0430\u0441\u0441\u0430\s+\u0442\u0440\u0430\u043d\u0441\u043f\u043e\u0440\u0442\u043d\u043e\u0433\u043e\s+\u0441\u0440\u0435\u0434\u0441\u0442\u0432\u0430\s+\u0432\s+\u0441\u043d\u0430\u0440\u044f\u0436\u0435\u043d\u043d\u043e\u043c": "curb_mass",
+    r"\u043c\u0430\u0441\u0441\u0430\s+\u0431\u0435\u0437\s+\u043d\u0430\u0433\u0440\u0443\u0437\u043a\u0438": "curb_mass",
 
-    # --- Country of manufacture ---
-    r"страна\s+изготовления": "country_of_manufacture",
-
-    # --- Engine type (incl. "марка, тип" in real PDF) ---
-    r"тип\s+двигателя": "engine_type",
-    r"двигатель\s+внутреннего\s+сгорания": "engine_type",
-
-    # --- Engine power: "мощность двигателя" OR "максимальная мощность" ---
-    r"мощность\s+двигателя": "engine_power_kw",
-    r"максимальная\s+мощность": "engine_power_kw",
-
-    # --- Engine volume: "рабочий объём" OR "рабочий объем" ---
-    r"рабочий\s+объ[ёе]м": "engine_volume",
-
-    # --- Fuel type: "тип топлива" OR "вид топлива" ---
-    r"тип\s+топлива": "fuel_type",
-    r"вид\s+топлива": "fuel_type",
-
-    # --- Eco class ---
-    r"экологический\s+класс": "eco_class",
-
-    # --- Max mass: standard OR real-PDF "технически допустимая максимальная масса" ---
-    r"разрешённая\s+максимальная\s+масса": "max_mass",
-    r"технически\s+допустимая\s+максимальная\s+масса": "max_mass",
-
-    # --- Curb mass: standard OR "масса транспортного средства в снаряженном" ---
-    r"масса\s+без\s+нагрузки": "curb_mass",
-    r"масса\s+транспортного\s+средства\s+в\s+снаряженном": "curb_mass",
-
-    # --- Seats: "количество мест" OR "количество мест для сидения" ---
-    r"количество\s+мест": "seats_count",
+    # --- Seats / wheels / transmission ---
+    r"\u043a\u043e\u043b\u0438\u0447\u0435\u0441\u0442\u0432\u043e\s+\u043c\u0435\u0441\u0442": "seats_count",
+    r"\u043a\u043e\u043b\u0435\u0441\u043d\u0430\u044f\s+\u0444\u043e\u0440\u043c\u0443\u043b\u0430": "drive_wheels",
+    r"\u0442\u0440\u0430\u043d\u0441\u043c\u0438\u0441\u0441\u0438\u044f": "transmission",
 
     # --- Manufacturer ---
-    r"наименование\s+изготовителя": "manufacturer_name",
-    r"изготовитель$": "manufacturer_name",
-    r"инн\s+изготовителя": "manufacturer_inn",
-    r"страна\s+нахождения\s+изготовителя": "manufacturer_country",
-    r"адрес\s+изготовителя": "manufacturer_country",
+    r"\u043d\u0430\u0438\u043c\u0435\u043d\u043e\u0432\u0430\u043d\u0438\u0435\s+\u0438\u0437\u0433\u043e\u0442\u043e\u0432\u0438\u0442\u0435\u043b\u044f": "manufacturer_name",
+    r"^\u0438\u0437\u0433\u043e\u0442\u043e\u0432\u0438\u0442\u0435\u043b\u044c$": "manufacturer_name",
+    r"\u0438\u043d\u043d\s+\u0438\u0437\u0433\u043e\u0442\u043e\u0432\u0438\u0442\u0435\u043b\u044f": "manufacturer_inn",
+    r"\u0441\u0442\u0440\u0430\u043d\u0430\s+\u043d\u0430\u0445\u043e\u0436\u0434\u0435\u043d\u0438\u044f\s+\u0438\u0437\u0433\u043e\u0442\u043e\u0432\u0438\u0442\u0435\u043b\u044f": "manufacturer_country",
+    r"\u0430\u0434\u0440\u0435\u0441\s+\u0438\u0437\u0433\u043e\u0442\u043e\u0432\u0438\u0442\u0435\u043b\u044f": "manufacturer_address",
+    r"\u043d\u0430\u0438\u043c\u0435\u043d\u043e\u0432\u0430\u043d\u0438\u0435\s+\u043e\u0440\u0433\u0430\u043d\u0438\u0437\u0430\u0446\u0438\u0438.*\u043e\u0444\u043e\u0440\u043c\u0438\u0432\u0448\u0435\u0439": "org_registered",
 
-    # --- OTTS / approval ---
-    r"номер\s+одобрения\s+типа": "otts_number",
-    r"документ.*соответствие": "otts_number",
-    r"дата\s+одобрения\s+типа": "otts_date",
+    # --- Approval ---
+    r"\u043d\u043e\u043c\u0435\u0440\s+\u043e\u0434\u043e\u0431\u0440\u0435\u043d\u0438\u044f\s+\u0442\u0438\u043f\u0430": "otts_number",
+    r"\u0434\u0430\u0442\u0430\s+\u043e\u0434\u043e\u0431\u0440\u0435\u043d\u0438\u044f\s+\u0442\u0438\u043f\u0430": "otts_date",
+    r"\u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442.*\u0441\u043e\u043e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0438\u0435.*\u0442\u0440\u0435\u0431\u043e\u0432\u0430\u043d\u0438\u044f\u043c": "vehicle_type_approval",
+    r"\u0441\u0432\u0435\u0434\u0435\u043d\u0438\u044f.*\u044d\u043a\u0441\u0442\u0440\u0435\u043d\u043d\u044b\u0445": "emergency_services_number",
 
     # --- Customs ---
-    r"таможенная\s+декларация": "customs_declaration",
-    r"таможенный\s+приходный\s+ордер": "customs_declaration",
-    r"серия.*номер.*таможен": "customs_declaration",
+    r"\u0441\u0435\u0440\u0438\u044f.*\u043d\u043e\u043c\u0435\u0440.*\u0442\u0430\u043c\u043e\u0436\u0435\u043d": "customs_declaration",
+    r"\u0442\u0430\u043c\u043e\u0436\u0435\u043d\u043d\u0430\u044f\s+\u0434\u0435\u043a\u043b\u0430\u0440\u0430\u0446\u0438\u044f": "customs_declaration",
+    r"\u0442\u0430\u043c\u043e\u0436\u0435\u043d\u043d\u044b\u0439\s+\u043f\u0440\u0438\u0445\u043e\u0434\u043d\u044b\u0439\s+\u043e\u0440\u0434\u0435\u0440": "customs_declaration",
+    r"\u0442\u0430\u043c\u043e\u0436\u0435\u043d\u043d\u044b\u0435\s+\u043e\u0433\u0440\u0430\u043d\u0438\u0447\u0435\u043d\u0438\u044f": "customs_restrictions",
+    r"\u0441\u0442\u0440\u0430\u043d\u0430\s+\u0443\u043f\u043b\u0430\u0442\u044b\s+\u0443\u0442\u0438\u043b\u0438\u0437\u0430\u0446\u0438\u043e\u043d\u043d\u043e\u0433\u043e": "recycling_pay_country",
 
-    # --- Owner: standard OR real-PDF "Собственник" ---
-    r"наименование\s+владельца": "owner_name",
-    r"^собственник$": "owner_name",
-    r"инн\s+владельца": "owner_inn",
-    r"огрн\s+владельца": "owner_ogrn",
-    r"адрес\s+владельца": "owner_address",
+    # --- Owner ---
+    r"^\u0441\u043e\u0431\u0441\u0442\u0432\u0435\u043d\u043d\u0438\u043a$": "owner_name",
+    r"\u043d\u0430\u0438\u043c\u0435\u043d\u043e\u0432\u0430\u043d\u0438\u0435\s+\u0432\u043b\u0430\u0434\u0435\u043b\u044c\u0446\u0430": "owner_name",
+    r"\u0438\u043d\u043d\s+\u0432\u043b\u0430\u0434\u0435\u043b\u044c\u0446\u0430": "owner_inn",
+    r"\u043e\u0433\u0440\u043d\s+\u0432\u043b\u0430\u0434\u0435\u043b\u044c\u0446\u0430": "owner_ogrn",
+    r"\u0430\u0434\u0440\u0435\u0441\s+\u0432\u043b\u0430\u0434\u0435\u043b\u044c\u0446\u0430": "owner_address",
+    r"\u043e\u0433\u0440\u0430\u043d\u0438\u0447\u0435\u043d\u0438\u044f\s+\(\u043e\u0431\u0440\u0435\u043c\u0435\u043d\u0435\u043d\u0438\u044f\)": "any_restrictions",
+    r"\u0442\u0435\u0440\u0440\u0438\u0442\u043e\u0440\u0438\u044f.*\u0441\u0442\u0430\u0442\u0443\u0441.*\u0434\u0435\u0439\u0441\u0442\u0432\u0443\u044e\u0449\u0438\u0439": "registered_country",
+    r"\u0438\u043d\u0430\u044f\s+\u0438\u043d\u0444\u043e\u0440\u043c\u0430\u0446\u0438\u044f\s+\u043e\u0440\u0433\u0430\u043d\u0438\u0437\u0430\u0446\u0438\u0438": "registered_country_info",
 
     # --- Document ---
-    r"дата\s+выдачи": "issue_date",
-    r"дата\s+оформления": "issue_date",
-    r"кем\s+выдан": "issuer",
-    r"наименование\s+организации.*оформившей": "issuer",
+    r"\u0434\u0430\u0442\u0430\s+\u043e\u0444\u043e\u0440\u043c\u043b\u0435\u043d\u0438\u044f.*\u044d\u043b\u0435\u043a\u0442\u0440\u043e\u043d\u043d\u043e\u0433\u043e": "issue_date",
+    r"\u0434\u0430\u0442\u0430\s+\u0432\u044b\u0434\u0430\u0447\u0438": "issue_date",
+    r"\u043a\u0435\u043c\s+\u0432\u044b\u0434\u0430\u043d": "issuer",
+    r"\u0434\u0430\u0442\u0430\s+\u0438\s+\u0432\u0440\u0435\u043c\u044f\s+\u0444\u043e\u0440\u043c\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u044f": "printed_date",
 }
 
 # Maps English field names to Russian display labels
 RU_LABELS: dict[str, str] = {
-    "epts_number": "Номер ЭПТС",
-    "vin": "Идентификационный номер (VIN)",
-    "pts_number": "Номер ПТС",
-    "brand": "Марка",
-    "model": "Коммерческое наименование",
-    "vehicle_type": "Наименование (тип) ТС",
-    "category": "Категория ТС",
-    "year": "Год изготовления",
-    "color": "Цвет",
-    "body_number": "Номер кузова",
-    "chassis_number": "Номер шасси",
-    "country_of_manufacture": "Страна изготовления",
-    "engine_number": "Номер двигателя",
-    "engine_type": "Тип двигатеня",
-    "engine_power_kw": "Мощность двигателя (кВт)",
-    "engine_power_hp": "Мощность двигателя (л.с.)",
-    "engine_volume": "Рабочий объём двигателя",
-    "fuel_type": "Тип топлива",
-    "eco_class": "Экологический класс",
-    "max_mass": "Разрешённая максимальная масса",
-    "curb_mass": "Масса без нагрузки",
-    "seats_count": "Количество мест",
-    "manufacturer_name": "Наименование изготовителя",
-    "manufacturer_inn": "ИНН изготовителя",
-    "manufacturer_country": "Страна нахождения изготовителя",
-    "otts_number": "Номер одобрения типа",
-    "otts_date": "Дата одобрения типа",
-    "customs_declaration": "Таможенная декларация",
-    "owner_name": "Наименование владельца",
-    "owner_inn": "ИНН владельца",
-    "owner_ogrn": "ОГРН владельца",
-    "owner_address": "Адрес владельца",
-    "issue_date": "Дата выдачи",
-    "issuer": "Кем выдан",
+    "epts_number": "\u041d\u043e\u043c\u0435\u0440 \u042d\u041f\u0422\u0421",
+    "epts_status": "\u0421\u0442\u0430\u0442\u0443\u0441 \u042d\u041f\u0422\u0421",
+    "vin": "VIN",
+    "pts_number": "\u041d\u043e\u043c\u0435\u0440 \u041f\u0422\u0421",
+    "brand": "\u041c\u0430\u0440\u043a\u0430",
+    "model": "\u041c\u043e\u0434\u0435\u043b\u044c",
+    "modification": "\u041c\u043e\u0434\u0438\u0444\u0438\u043a\u0430\u0446\u0438\u044f",
+    "vehicle_type": "\u041a\u0430\u0442\u0435\u0433\u043e\u0440\u0438\u044f (\u0422\u0420 \u0422\u0421 018/2011)",
+    "category": "\u041a\u0430\u0442\u0435\u0433\u043e\u0440\u0438\u044f (\u041a\u043e\u043d\u0432\u0435\u043d\u0446\u0438\u044f)",
+    "year": "\u0413\u043e\u0434 \u0438\u0437\u0433\u043e\u0442\u043e\u0432\u043b\u0435\u043d\u0438\u044f",
+    "color": "\u0426\u0432\u0435\u0442",
+    "color_shade": "\u041e\u0442\u0442\u0435\u043d\u043e\u043a \u0446\u0432\u0435\u0442\u0430",
+    "body_number": "\u041d\u043e\u043c\u0435\u0440 \u043a\u0443\u0437\u043e\u0432\u0430",
+    "chassis_number": "\u041d\u043e\u043c\u0435\u0440 \u0448\u0430\u0441\u0441\u0438",
+    "country_of_manufacture": "\u0421\u0442\u0440\u0430\u043d\u0430 \u0438\u0437\u0433\u043e\u0442\u043e\u0432\u043b\u0435\u043d\u0438\u044f",
+    "engine_number": "\u041d\u043e\u043c\u0435\u0440 \u0434\u0432\u0438\u0433\u0430\u0442\u0435\u043b\u044f",
+    "engine_type": "\u0422\u0438\u043f \u0434\u0432\u0438\u0433\u0430\u0442\u0435\u043b\u044f",
+    "engine_power_kw": "\u041c\u043e\u0449\u043d\u043e\u0441\u0442\u044c (\u043a\u0412\u0442)",
+    "engine_power_hp": "\u041c\u043e\u0449\u043d\u043e\u0441\u0442\u044c (\u043b.\u0441.)",
+    "engine_volume": "\u041e\u0431\u044a\u0451\u043c \u0434\u0432\u0438\u0433\u0430\u0442\u0435\u043b\u044f (\u0441\u043c\u00b3)",
+    "engine_electric_type": "\u042d\u043b\u0435\u043a\u0442\u0440\u043e\u043c\u0430\u0448\u0438\u043d\u0430 (\u0442\u0438\u043f)",
+    "engine_electric_voltage": "\u0420\u0430\u0431\u043e\u0447\u0435\u0435 \u043d\u0430\u043f\u0440\u044f\u0436\u0435\u043d\u0438\u0435 (\u0412)",
+    "engine_power_30min_kw": "\u041c\u043e\u0449\u043d\u043e\u0441\u0442\u044c 30\u043c\u0438\u043d (\u043a\u0412\u0442)",
+    "hybrid_description": "\u041e\u043f\u0438\u0441\u0430\u043d\u0438\u0435 \u0433\u0438\u0431\u0440\u0438\u0434\u043d\u043e\u0439 \u043a\u043e\u043d\u0441\u0442\u0440\u0443\u043a\u0446\u0438\u0438",
+    "fuel_type": "\u0422\u0438\u043f \u0442\u043e\u043f\u043b\u0438\u0432\u0430",
+    "eco_class": "\u042d\u043a\u043e\u043b\u043e\u0433\u0438\u0447\u0435\u0441\u043a\u0438\u0439 \u043a\u043b\u0430\u0441\u0441",
+    "max_mass": "\u041c\u0430\u043a\u0441\u0438\u043c\u0430\u043b\u044c\u043d\u0430\u044f \u0434\u043e\u043f\u0443\u0441\u0442\u0438\u043c\u0430\u044f \u043c\u0430\u0441\u0441\u0430 (\u043a\u0433)",
+    "curb_mass": "\u041c\u0430\u0441\u0441\u0430 \u0432 \u0441\u043d\u0430\u0440\u044f\u0436\u0435\u043d\u043d\u043e\u043c \u0441\u043e\u0441\u0442\u043e\u044f\u043d\u0438\u0438 (\u043a\u0433)",
+    "seats_count": "\u041a\u043e\u043b\u0438\u0447\u0435\u0441\u0442\u0432\u043e \u043c\u0435\u0441\u0442",
+    "drive_wheels": "\u041a\u043e\u043b\u0435\u0441\u043d\u0430\u044f \u0444\u043e\u0440\u043c\u0443\u043b\u0430",
+    "transmission": "\u0422\u0440\u0430\u043d\u0441\u043c\u0438\u0441\u0441\u0438\u044f",
+    "manufacturer_name": "\u0418\u0437\u0433\u043e\u0442\u043e\u0432\u0438\u0442\u0435\u043b\u044c",
+    "manufacturer_inn": "\u0418\u041d\u041d \u0438\u0437\u0433\u043e\u0442\u043e\u0432\u0438\u0442\u0435\u043b\u044f",
+    "manufacturer_country": "\u0421\u0442\u0440\u0430\u043d\u0430 \u0438\u0437\u0433\u043e\u0442\u043e\u0432\u0438\u0442\u0435\u043b\u044f",
+    "manufacturer_address": "\u0410\u0434\u0440\u0435\u0441 \u0438\u0437\u0433\u043e\u0442\u043e\u0432\u0438\u0442\u0435\u043b\u044f",
+    "org_registered": "\u041e\u0440\u0433\u0430\u043d\u0438\u0437\u0430\u0446\u0438\u044f, \u043e\u0444\u043e\u0440\u043c\u0438\u0432\u0448\u0430\u044f \u042d\u041f\u0422\u0421",
+    "otts_number": "\u041d\u043e\u043c\u0435\u0440 \u043e\u0434\u043e\u0431\u0440\u0435\u043d\u0438\u044f \u0442\u0438\u043f\u0430",
+    "otts_date": "\u0414\u0430\u0442\u0430 \u043e\u0434\u043e\u0431\u0440\u0435\u043d\u0438\u044f \u0442\u0438\u043f\u0430",
+    "vehicle_type_approval": "\u0414\u043e\u043a\u0443\u043c\u0435\u043d\u0442 \u043e\u0431 \u043e\u0434\u043e\u0431\u0440\u0435\u043d\u0438\u0438 \u0442\u0438\u043f\u0430",
+    "emergency_services_number": "\u041d\u043e\u043c\u0435\u0440 \u0443\u0441\u0442\u0440\u043e\u0439\u0441\u0442\u0432\u0430 \u044d\u043a\u0441\u0442\u0440\u0435\u043d\u043d\u044b\u0445 \u0441\u043b\u0443\u0436\u0431",
+    "customs_declaration": "\u0422\u0430\u043c\u043e\u0436\u0435\u043d\u043d\u0430\u044f \u0434\u0435\u043a\u043b\u0430\u0440\u0430\u0446\u0438\u044f",
+    "customs_restrictions": "\u0422\u0430\u043c\u043e\u0436\u0435\u043d\u043d\u044b\u0435 \u043e\u0433\u0440\u0430\u043d\u0438\u0447\u0435\u043d\u0438\u044f",
+    "recycling_pay_country": "\u0421\u0442\u0440\u0430\u043d\u0430 \u0443\u043f\u043b\u0430\u0442\u044b \u0443\u0442\u0438\u043b\u0438\u0437\u0430\u0446\u0441\u0431\u043e\u0440\u0430",
+    "owner_name": "\u0421\u043e\u0431\u0441\u0442\u0432\u0435\u043d\u043d\u0438\u043a",
+    "owner_inn": "\u0418\u041d\u041d \u0441\u043e\u0431\u0441\u0442\u0432\u0435\u043d\u043d\u0438\u043a\u0430",
+    "owner_ogrn": "\u041e\u0413\u0420\u041d \u0441\u043e\u0431\u0441\u0442\u0432\u0435\u043d\u043d\u0438\u043a\u0430",
+    "owner_address": "\u0410\u0434\u0440\u0435\u0441 \u0441\u043e\u0431\u0441\u0442\u0432\u0435\u043d\u043d\u0438\u043a\u0430",
+    "any_restrictions": "\u041e\u0433\u0440\u0430\u043d\u0438\u0447\u0435\u043d\u0438\u044f (\u043e\u0431\u0440\u0435\u043c\u0435\u043d\u0435\u043d\u0438\u044f)",
+    "registered_country": "\u0422\u0435\u0440\u0440\u0438\u0442\u043e\u0440\u0438\u044f \u043e\u0431\u0440\u0430\u0449\u0435\u043d\u0438\u044f",
+    "registered_country_info": "\u0418\u043d\u0430\u044f \u0438\u043d\u0444\u043e\u0440\u043c\u0430\u0446\u0438\u044f",
+    "issue_date": "\u0414\u0430\u0442\u0430 \u043e\u0444\u043e\u0440\u043c\u043b\u0435\u043d\u0438\u044f",
+    "issuer": "\u041a\u0435\u043c \u0432\u044b\u0434\u0430\u043d",
+    "printed_date": "\u0414\u0430\u0442\u0430 \u0444\u043e\u0440\u043c\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u044f",
 }
