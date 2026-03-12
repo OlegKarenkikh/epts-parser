@@ -4,16 +4,16 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "epts-parser"
-version = "0.1.0"
-description = "Structured data extraction from Russian vehicle electronic passport (ЭПТС) PDF"
+version = "1.1.0"
+description = "Structured data extraction from Russian vehicle electronic passport (ЭПТС/ЭПСМ) PDF"
 readme = "README.md"
 license = { file = "LICENSE" }
 authors = [
     { name = "OlegKarenkikh", email = "44174021+OlegKarenkikh@users.noreply.github.com" },
 ]
-keywords = ["epts", "pts", "vehicle", "passport", "pdf", "parser", "russia"]
+keywords = ["epts", "epsm", "pts", "vehicle", "passport", "pdf", "parser", "russia", "samohodny"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
@@ -46,6 +46,7 @@ epts-parser = "epts_parser.__main__:main"
 Homepage = "https://github.com/OlegKarenkikh/epts-parser"
 Repository = "https://github.com/OlegKarenkikh/epts-parser"
 Issues = "https://github.com/OlegKarenkikh/epts-parser/issues"
+Changelog = "https://github.com/OlegKarenkikh/epts-parser/releases"
 
 [tool.setuptools.packages.find]
 where = ["."]
