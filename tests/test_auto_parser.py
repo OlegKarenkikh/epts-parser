@@ -6,7 +6,8 @@ import pytest
 from unittest.mock import patch, MagicMock
 
 from epts_parser.parser_epsm import detect_passport_type
-from epts_parser.auto_parser import passport_type_str
+from epts_parser.auto_parser import parse_any, passport_type_str
+from epts_parser.models_epsm import VehiclePassportEPSM
 
 
 class TestDetectPassportType:
@@ -28,7 +29,6 @@ class TestDetectPassportType:
         assert detect_passport_type(text) == "EPTS"
 
     def test_epsm_fallback_via_samohodny(self):
-        # Tie in keyword score, but 'самоходн' present in first 3000 chars
         text = "Самоходная машина без явных маркеров"
         assert detect_passport_type(text) == "EPSM"
 
@@ -89,7 +89,6 @@ class TestParseAnyDispatch:
         return pdf_ctx
 
     def test_dispatches_to_epsm_parser(self, tmp_path):
-        from epts_parser.models_epsm import VehiclePassportEPSM
         fake_pdf = tmp_path / "epsm.pdf"
         fake_pdf.write_bytes(b"%PDF-1.4")
         epsm_text = (
@@ -98,10 +97,9 @@ class TestParseAnyDispatch:
         )
         mock_pdf = self._make_pdf_mock(epsm_text)
         with patch("epts_parser.auto_parser.pdfplumber") as ap_mock, \
-             patch("epts_parser.parser_epsm.pdfplumber") as ep_mock:
+             patch("epts_parser.parser_epsm.pdfplumber") as ep_mock:  # noqa: F841
             ap_mock.open.return_value = mock_pdf
             ep_mock.open.return_value = mock_pdf
-            from epts_parser.auto_parser import parse_any
             result = parse_any(fake_pdf)
         assert isinstance(result, VehiclePassportEPSM)
 
@@ -111,6 +109,5 @@ class TestParseAnyDispatch:
         mock_pdf = self._make_pdf_mock("Совершенно непонятный документ")
         with patch("epts_parser.auto_parser.pdfplumber") as ap_mock:
             ap_mock.open.return_value = mock_pdf
-            from epts_parser.auto_parser import parse_any
             with pytest.raises(ValueError, match="Cannot detect"):
                 parse_any(fake_pdf)
