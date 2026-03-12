@@ -10,23 +10,16 @@ Usage:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Union
 
 try:
     import pdfplumber
 except ImportError:
     pdfplumber = None  # type: ignore
 
-if TYPE_CHECKING:
-    from .models import VehiclePassportData
-    from .models_epsm import VehiclePassportEPSM
-
 from .parser_epsm import detect_passport_type, EPSMParser
 
-ParseResult = Union["VehiclePassportData", "VehiclePassportEPSM"]
 
-
-def parse_any(path: str | Path) -> ParseResult:
+def parse_any(path: str | Path):
     """
     Auto-detect passport type from PDF content and dispatch to the
     correct parser.
