@@ -8,6 +8,7 @@ import pathlib
 from epts_parser.models_epsm import (
     VehiclePassportEPSM,
     AxleLoadDetails,
+    EngineDetails,
 )
 from epts_parser.validators_epsm import validate_epsm
 from epts_parser.parser_epsm import detect_passport_type, EPSMParser
@@ -56,6 +57,15 @@ class TestEPSMModel:
         assert al.axle_index == 1
         assert al.max_load_kg == "5800"
 
+    def test_engine_details_defaults(self):
+        eng = EngineDetails()
+        assert eng.engine_power_kw is None
+        assert eng.fuel_type is None
+
+    def test_passport_type_default(self):
+        rec = VehiclePassportEPSM()
+        assert rec.passport_type == "ЭПСМ"
+
 
 class TestEPSMValidator:
     def test_valid_record(self):
@@ -68,15 +78,31 @@ class TestEPSMValidator:
         errors = validate_epsm(rec)
         assert any("EPSM number" in e[1] for e in errors)
 
+    def test_valid_epsm_number_15_digits(self):
+        rec = VehiclePassportEPSM(epsm_number="264300200012345")
+        errors = validate_epsm(rec)
+        assert not any("EPSM number" in e[1] for e in errors)
+
     def test_invalid_category(self):
         rec = VehiclePassportEPSM(category_epsm="Z")
         errors = validate_epsm(rec)
         assert any("category" in e[1].lower() for e in errors)
 
+    def test_valid_category_A(self):
+        for cat in ("A", "AI", "AII", "AIII", "AIV", "B", "C", "F", "R"):
+            rec = VehiclePassportEPSM(category_epsm=cat)
+            errors = validate_epsm(rec)
+            assert not any("category" in e[1].lower() for e in errors), f"Failed for {cat}"
+
     def test_invalid_year(self):
         rec = VehiclePassportEPSM(year="1899")
         errors = validate_epsm(rec)
         assert any("year" in e[1].lower() for e in errors)
+
+    def test_valid_year(self):
+        rec = VehiclePassportEPSM(year="2023")
+        errors = validate_epsm(rec)
+        assert not any("year" in e[1].lower() for e in errors)
 
     def test_valid_customs_format(self):
         rec = VehiclePassportEPSM(customs_declaration="10702000/150823/100000001")
@@ -87,6 +113,26 @@ class TestEPSMValidator:
         rec = VehiclePassportEPSM(curb_mass="abc")
         errors = validate_epsm(rec)
         assert any("curb_mass" in e[0] for e in errors)
+
+    def test_valid_mass(self):
+        rec = VehiclePassportEPSM(curb_mass="9500")
+        errors = validate_epsm(rec)
+        assert not any("curb_mass" in e[0] for e in errors)
+
+    def test_none_fields_no_errors(self):
+        rec = VehiclePassportEPSM()
+        errors = validate_epsm(rec)
+        assert errors == []
+
+    def test_invalid_month(self):
+        rec = VehiclePassportEPSM(month="13")
+        errors = validate_epsm(rec)
+        assert any("month" in e[1].lower() for e in errors)
+
+    def test_valid_month(self):
+        rec = VehiclePassportEPSM(month="06")
+        errors = validate_epsm(rec)
+        assert not any("month" in e[1].lower() for e in errors)
 
 
 class TestDetector:
@@ -108,10 +154,19 @@ class TestDetector:
         result = detect_passport_type("Какой-то случайный текст")
         assert result in ("EPTS", "EPSM", "UNKNOWN")
 
+    def test_epsm_via_samohodny_fallback(self):
+        text = "Самоходная машина без явных маркеров"
+        assert detect_passport_type(text) == "EPSM"
+
 
 class TestEPSMParserText:
     def test_parse_epsm_number_from_text(self):
         text = "Номер ЭПСМ: 264300200012345\nСтатус: действующий"
+        rec = EPSMParser().parse_text(text)
+        assert rec.epsm_number == "264300200012345"
+
+    def test_parse_epsm_number_fallback_bare(self):
+        text = "Статус электронного паспорта – действующий\n264300200012345"
         rec = EPSMParser().parse_text(text)
         assert rec.epsm_number == "264300200012345"
 
@@ -124,3 +179,31 @@ class TestEPSMParserText:
         text = "Идентификационный номер: 1RW8330XPNC123456\nМарка: John Deere"
         rec = EPSMParser().parse_text(text)
         assert rec.vin == "1RW8330XPNC123456"
+
+    def test_parse_brand_and_year(self):
+        text = "Марка: CLAAS\nГод изготовления: 2022\n"
+        rec = EPSMParser().parse_text(text)
+        assert rec.brand == "CLAAS"
+        assert rec.year == "2022"
+
+    def test_parse_month_year(self):
+        text = "Месяц и год изготовления: 04/2021"
+        rec = EPSMParser().parse_text(text)
+        assert rec.month == "04"
+        assert rec.year == "2021"
+
+    def test_parse_axle_loads(self):
+        text = "Ось 1: 5800 кг\nОсь 2: 6200 кг"
+        rec = EPSMParser().parse_text(text)
+        assert len(rec.axle_loads) == 2
+        assert rec.axle_loads[0].max_load_kg == "5800"
+
+    def test_parse_engine_power(self):
+        text = "Максимальная мощность: 206,0 кВт\n"
+        rec = EPSMParser().parse_text(text)
+        assert rec.engines[0].engine_power_kw is not None
+
+    def test_empty_text_returns_empty_record(self):
+        rec = EPSMParser().parse_text("")
+        assert rec.epsm_number is None
+        assert rec.brand is None
