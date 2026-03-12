@@ -8,10 +8,6 @@ import pathlib
 from epts_parser.models_epsm import (
     VehiclePassportEPSM,
     AxleLoadDetails,
-    RegistrationRecord,
-    ConstructionModification,
-    EngineDetails,
-    TransmissionDetails,
 )
 from epts_parser.validators_epsm import validate_epsm
 from epts_parser.parser_epsm import detect_passport_type, EPSMParser

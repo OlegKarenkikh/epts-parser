@@ -10,18 +10,20 @@ Usage:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Union
+from typing import TYPE_CHECKING, Union
 
 try:
     import pdfplumber
 except ImportError:
     pdfplumber = None  # type: ignore
 
-from .models import VehiclePassportData
-from .parser_epsm import detect_passport_type, EPSMParser
-from .models_epsm import VehiclePassportEPSM
+if TYPE_CHECKING:
+    from .models import VehiclePassportData
+    from .models_epsm import VehiclePassportEPSM
 
-ParseResult = Union[VehiclePassportData, VehiclePassportEPSM]
+from .parser_epsm import detect_passport_type, EPSMParser
+
+ParseResult = Union["VehiclePassportData", "VehiclePassportEPSM"]
 
 
 def parse_any(path: str | Path) -> ParseResult:

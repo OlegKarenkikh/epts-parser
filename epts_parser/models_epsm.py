@@ -7,7 +7,7 @@ Active since: 02.11.2022.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional, List
+from typing import List, Optional
 
 
 @dataclass
@@ -17,10 +17,10 @@ class EngineDetails:
     engine_number: Optional[str] = None
     engine_type: Optional[str] = None
     engine_brand: Optional[str] = None
-    engine_volume: Optional[str] = None        # cm3
+    engine_volume: Optional[str] = None
     engine_power_kw: Optional[str] = None
     engine_rpm_at_max_power: Optional[str] = None
-    engine_torque: Optional[str] = None        # N·m
+    engine_torque: Optional[str] = None
     engine_cylinders: Optional[str] = None
     engine_cylinder_layout: Optional[str] = None
     fuel_type: Optional[str] = None
@@ -90,7 +90,7 @@ class VehiclePassportEPSM:
 
     # -- Document identity
     passport_type: str = "ЭПСМ"
-    epsm_number: Optional[str] = None       # pattern: [1-3]\d{3}0[1-4]\d{9}
+    epsm_number: Optional[str] = None
     epsm_status: Optional[str] = None
     issue_date: Optional[str] = None
     issuer: Optional[str] = None
@@ -107,9 +107,7 @@ class VehiclePassportEPSM:
     modification: Optional[str] = None
 
     # -- Categories
-    # Appendix 7/8 to EEC 122: A(I-IV), B, C, D, E, F, R
-    category_epsm: Optional[str] = None     # pattern: A(IV|I{1,3})?|[B-FRr]
-    # per TR TS 031/2012, 010/2011 or 018/2011
+    category_epsm: Optional[str] = None
     category_trts: Optional[str] = None
 
     # -- Aggregate numbers
@@ -208,7 +206,7 @@ class VehiclePassportEPSM:
     # -- Construction modifications
     modifications_history: List[ConstructionModification] = field(default_factory=list)
 
-    # -- Base vehicle (built on top of another)
+    # -- Base vehicle
     base_vehicle_brand: Optional[str] = None
     base_vehicle_model: Optional[str] = None
     base_vehicle_passport_number: Optional[str] = None
@@ -221,4 +219,4 @@ class VehiclePassportEPSM:
     privileged_mode: Optional[str] = None
     notes: Optional[str] = None
 
-    raw_tables: list = field(default_factory=list, repr=False)
+    raw_tables: List[str] = field(default_factory=list, repr=False)
