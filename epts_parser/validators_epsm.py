@@ -5,16 +5,16 @@ Patterns derived from EEC Decision No. 81 (R.019) and NAMI Appendix 3.
 from __future__ import annotations
 
 import re
-from typing import List, Pattern, Tuple
+from typing import List, Tuple
 
 from .models_epsm import VehiclePassportEPSM
 
-_RE_EPSM_NUMBER: Pattern[str] = re.compile(r"^[1-3]\d{3}0[1-4]\d{9}$")
-_RE_CATEGORY_SM: Pattern[str] = re.compile(r"^A(IV|I{1,3})?$|^[B-FRr]$")
-_RE_CUSTOMS: Pattern[str]     = re.compile(r"^\d{8}/\d{6}/\d{7,10}$")
-_RE_YEAR: Pattern[str]        = re.compile(r"^(19|20)\d{2}$")
-_RE_MONTH: Pattern[str]       = re.compile(r"^(0[1-9]|1[0-2])$")
-_RE_DATE_RU: Pattern[str]     = re.compile(r"^\d{2}\.\d{2}\.\d{4}$")
+_RE_EPSM_NUMBER = re.compile(r"^[1-3]\d{3}0[1-4]\d{9}$")
+_RE_CATEGORY_SM = re.compile(r"^A(IV|I{1,3})?$|^[B-FRr]$")
+_RE_CUSTOMS     = re.compile(r"^\d{8}/\d{6}/\d{7,10}$")
+_RE_YEAR        = re.compile(r"^(19|20)\d{2}$")
+_RE_MONTH       = re.compile(r"^(0[1-9]|1[0-2])$")
+_RE_DATE_RU     = re.compile(r"^\d{2}\.\d{2}\.\d{4}$")
 
 ValidationResult = List[Tuple[str, str]]
 
@@ -41,7 +41,7 @@ def validate_epsm(record: VehiclePassportEPSM) -> ValidationResult:
     """Validate a VehiclePassportEPSM record. Returns list of (field, error) tuples."""
     errors: ValidationResult = []
 
-    def _check(field: str, pattern: Pattern[str], label: str) -> None:
+    def _check(field: str, pattern: re.Pattern, label: str) -> None:  # type: ignore[type-arg]
         val = getattr(record, field, None)
         if val is not None and not pattern.match(val):
             errors.append((field, f"{label}: '{val}' does not match {pattern.pattern}"))

@@ -45,7 +45,7 @@ def parse_any(path: str | Path):
         return EPSMParser().parse_file(path)
     elif doc_type == "EPTS":
         from .parser import EPTSParser  # noqa: PLC0415
-        return EPTSParser().parse_file(path)
+        return EPTSParser(path).parse()  # EPTSParser takes path in __init__, method is parse()
     else:
         raise ValueError(
             f"Cannot detect passport type in '{path.name}'. "
