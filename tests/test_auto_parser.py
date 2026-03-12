@@ -97,9 +97,8 @@ class TestParseAnyDispatch:
         )
         mock_pdf = self._make_pdf_mock(epsm_text)
         with patch("epts_parser.auto_parser.pdfplumber") as ap_mock, \
-             patch("epts_parser.parser_epsm.pdfplumber") as ep_mock:  # noqa: F841
+             patch("epts_parser.parser_epsm.pdfplumber"):
             ap_mock.open.return_value = mock_pdf
-            ep_mock.open.return_value = mock_pdf
             result = parse_any(fake_pdf)
         assert isinstance(result, VehiclePassportEPSM)
 
