@@ -3,7 +3,6 @@ Tests for exporters: to_csv and to_jsonl.
 """
 import csv
 import json
-import pathlib
 
 import pytest
 
@@ -59,7 +58,6 @@ class TestToCsv:
         to_csv(sample_records, out)
         with open(out, encoding="utf-8-sig") as f:
             rows = list(csv.DictReader(f))
-        # second record has no engine_power_kw set
         assert rows[1]["engine_power_kw"] == ""
 
     def test_values_correct(self, tmp_path, sample_records):
@@ -100,7 +98,6 @@ class TestToJsonl:
         to_jsonl(sample_records, out)
         lines = out.read_text(encoding="utf-8").strip().splitlines()
         obj2 = json.loads(lines[1])
-        # second record has no engine_power_kw
         assert "engine_power_kw" not in obj2
 
     def test_cyrillic_preserved(self, tmp_path, sample_records):
