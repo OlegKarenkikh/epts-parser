@@ -55,7 +55,8 @@ def _after_label(label: str, text: str, max_len: int = 200) -> Optional[str]:
     return None
 
 
-_RE_EPSM_NUMBER = re.compile(r"\b([1-3]\d{3}0[1-4]\d{9})\b")
+# EPSM number: 15 digits (same length as EPTS), per R.019 / EEC Decision 81
+_RE_EPSM_NUMBER = re.compile(r"\b(\d{15})\b")
 _RE_DATE        = re.compile(r"\b(\d{2}\.\d{2}\.\d{4})\b")
 
 
@@ -135,11 +136,16 @@ class EPSMParser:
         return rec
 
     def _parse_document_identity(self, text: str, r: VehiclePassportEPSM) -> None:
-        m = _RE_EPSM_NUMBER.search(text)
-        r.epsm_number = m.group(1) if m else None
+        # Try labeled pattern first: "Номер ЭПСМ: XXXXXXXXXXXXXXX"
+        m = re.search(r"[Нн]омер\s+[ЭэEe][ПпPp][СсSs][МмMm]\s*[:\-]?\s*(\d{15})", text)
+        if m:
+            r.epsm_number = m.group(1)
+        else:
+            m2 = _RE_EPSM_NUMBER.search(text)
+            r.epsm_number = m2.group(1) if m2 else None
         r.epsm_status = (
             _after_label("Статус электронного паспорта", text)
-            or _after_label("статус", text)
+            or _after_label("Статус", text)
         )
         dates = _RE_DATE.findall(text)
         r.issue_date = dates[0] if dates else None

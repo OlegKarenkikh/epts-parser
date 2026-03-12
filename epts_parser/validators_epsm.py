@@ -9,7 +9,8 @@ from typing import List, Tuple
 
 from .models_epsm import VehiclePassportEPSM
 
-_RE_EPSM_NUMBER = re.compile(r"^[1-3]\d{3}0[1-4]\d{9}$")
+# EPSM number: 15 digits, same schema as EPTS (EEC R.019)
+_RE_EPSM_NUMBER = re.compile(r"^\d{15}$")
 _RE_CATEGORY_SM = re.compile(r"^A(IV|I{1,3})?$|^[B-FRr]$")
 _RE_CUSTOMS     = re.compile(r"^\d{8}/\d{6}/\d{7,10}$")
 _RE_YEAR        = re.compile(r"^(19|20)\d{2}$")
@@ -19,7 +20,7 @@ _RE_DATE_RU     = re.compile(r"^\d{2}\.\d{2}\.\d{4}$")
 ValidationResult = List[Tuple[str, str]]
 
 VALID_STATUSES = {
-    "незавершенный",
+    "незавершённый",
     "действующий",
     "аннулированный",
     "погашенный",
